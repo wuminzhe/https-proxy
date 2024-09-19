@@ -30,27 +30,24 @@ def map_request_class(method)
   end
 end
 
+if ARGV.length != 1
+  puts "Usage: ruby https_proxy.rb <backend_server_url>"
+  exit
+end
+backend_server_url = ARGV[0]
+ 
 # Handle HTTP to HTTP backend
 server.mount_proc '/' do |req, res|
-  uri = URI.parse("http://127.0.0.1:3000#{req.path}")
+  backend_server_fullpath = "#{backend_server_url}#{req.path}"
+  puts "Proxying request to #{backend_server_fullpath}"
 
-# Map request method to appropriate Net::HTTP class
+  uri = URI.parse(backend_server_fullpath)
   request_class = map_request_class(req.request_method)
-  
-  # Create a new request instance with the same method as the original request
   proxy_request = request_class.new(uri)
-  
-  # Pass headers from the original request to the proxy request
   req.header.each { |key, value| proxy_request[key] = value }
-
-  # If the request has a body (e.g., POST), pass it along as well
   proxy_request.body = req.body if req.body
-
-  # Send the request to the backend server
   http = Net::HTTP.new(uri.host, uri.port)
   backend_response = http.request(proxy_request)
-
-  # Set response status, headers, and body based on the backend response
   res.status = backend_response.code.to_i
   res.body = backend_response.body
   backend_response.each_header { |key, value| res[key] = value }
