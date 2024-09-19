@@ -1,48 +1,33 @@
 require 'webrick'
 require 'webrick/https'
+require 'openssl'
 require 'net/http'
-require 'uri'
 
-# Configure the backend HTTP server to forward requests to
-BACKEND_SERVER = 'http://127.0.0.1:3000' # Replace with your backend URL
-
-# Create an HTTPS server with self-signed certificates
+# Set up SSL/HTTPS configuration
 server = WEBrick::HTTPServer.new(
   Port: 443,
   SSLEnable: true,
-  SSLCertificate: OpenSSL::X509::Certificate.new(File.read('cert.pem')),
-  SSLPrivateKey: OpenSSL::PKey::RSA.new(File.read('key.pem')),
-  SSLOptions: OpenSSL::SSL::OP_ALL,
-  Logger: WEBrick::Log.new($stdout, WEBrick::Log::DEBUG),
-  AccessLog: [[ $stdout, WEBrick::AccessLog::COMBINED_LOG_FORMAT ]]
+  SSLVerifyClient: OpenSSL::SSL::VERIFY_NONE,
+  SSLCertificate: OpenSSL::X509::Certificate.new(File.read("path/to/your/cert.pem")),
+  SSLPrivateKey: OpenSSL::PKey::RSA.new(File.read("path/to/your/private_key.pem")),
+  SSLCertName: [["CN", WEBrick::Utils.getservername]]
 )
 
-# Proxy logic
+# Handle HTTP to HTTP backend
 server.mount_proc '/' do |req, res|
-  # Prepare the backend request
-  uri = URI.join(BACKEND_SERVER, req.path)
+  uri = URI.parse("http://your-backend-server.com#{req.path}")
+  proxy_request = Net::HTTP::GenericRequest.new(req.request_method, req.body.nil?, true, uri.request_uri)
+  
   http = Net::HTTP.new(uri.host, uri.port)
-
-  # Create the backend request
-  backend_req = Net::HTTP::GenericRequest.new(req.request_method, req.body.nil?, true, req.http_version)
-  backend_req.initialize_http_header(req.header)
-  backend_req.body = req.body
-
-  # Send the request to the backend server
-  backend_res = http.request(backend_req)
-
-  # Copy the response from the backend to the client
-  res.status = backend_res.code.to_i
-  res.body = backend_res.body
-  backend_res.each_header do |key, value|
-    res[key] = value
-  end
+  backend_response = http.request(proxy_request)
+  
+  res.body = backend_response.body
+  res.status = backend_response.code.to_i
+  res.content_type = backend_response.content_type
 end
 
-# Handle shutdown signal
 trap 'INT' do
   server.shutdown
 end
 
-# Start the proxy server
 server.start
