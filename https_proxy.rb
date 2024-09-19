@@ -8,14 +8,14 @@ server = WEBrick::HTTPServer.new(
   Port: 443,
   SSLEnable: true,
   SSLVerifyClient: OpenSSL::SSL::VERIFY_NONE,
-  SSLCertificate: OpenSSL::X509::Certificate.new(File.read("path/to/your/cert.pem")),
-  SSLPrivateKey: OpenSSL::PKey::RSA.new(File.read("path/to/your/private_key.pem")),
+  SSLCertificate: OpenSSL::X509::Certificate.new(File.read("cert.pem")),
+  SSLPrivateKey: OpenSSL::PKey::RSA.new(File.read("key.pem")),
   SSLCertName: [["CN", WEBrick::Utils.getservername]]
 )
 
 # Handle HTTP to HTTP backend
 server.mount_proc '/' do |req, res|
-  uri = URI.parse("http://your-backend-server.com#{req.path}")
+  uri = URI.parse("http://127.0.0.1:3000#{req.path}")
   proxy_request = Net::HTTP::GenericRequest.new(req.request_method, req.body.nil?, true, uri.request_uri)
   
   http = Net::HTTP.new(uri.host, uri.port)
