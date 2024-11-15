@@ -30,12 +30,19 @@ def map_request_class(method)
   end
 end
 
-# Add CORS headers helper method after the map_request_class method
+# Update the CORS headers method to be more permissive
 def add_cors_headers(response)
   response['Access-Control-Allow-Origin'] = '*'
-  response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-  response['Access-Control-Allow-Headers'] = 'Origin, Content-Type, Accept, Authorization, X-Requested-With'
+  response['Access-Control-Allow-Methods'] = '*'
+  response['Access-Control-Allow-Headers'] = '*'
+  response['Access-Control-Allow-Credentials'] = 'true'
   response['Access-Control-Max-Age'] = '3600'
+  
+  # Add debugging
+  puts "Added CORS headers:"
+  puts "Origin: #{response['Access-Control-Allow-Origin']}"
+  puts "Methods: #{response['Access-Control-Allow-Methods']}"
+  puts "Headers: #{response['Access-Control-Allow-Headers']}"
 end
 
 # Define backend routes
@@ -54,13 +61,20 @@ ROUTES = {
   }
 }
 
-# Handle HTTP to HTTP backend
+# Add debugging in the request handler
 server.mount_proc '/' do |req, res|
+  # Print incoming request details
+  puts "\nIncoming request:"
+  puts "Method: #{req.request_method}"
+  puts "Path: #{req.path}"
+  puts "Headers: #{req.header.inspect}"
+  
   # Add CORS headers to all responses
   add_cors_headers(res)
 
   # Handle OPTIONS requests for CORS preflight
   if req.request_method == 'OPTIONS'
+    puts "Handling OPTIONS preflight request"
     res.status = 200
     return
   end
