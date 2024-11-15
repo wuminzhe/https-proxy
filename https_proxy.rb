@@ -30,19 +30,24 @@ def map_request_class(method)
   end
 end
 
-# Update the CORS headers method to be more permissive
-def add_cors_headers(response)
-  response['Access-Control-Allow-Origin'] = '*'
-  response['Access-Control-Allow-Methods'] = '*'
-  response['Access-Control-Allow-Headers'] = '*'
+# Update the CORS headers method to handle specific origins
+def add_cors_headers(response, request)
+  # Get the origin from the request headers
+  origin = request.header['origin']&.first || '*'
+  
+  response['Access-Control-Allow-Origin'] = origin
+  response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
+  response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
   response['Access-Control-Allow-Credentials'] = 'true'
   response['Access-Control-Max-Age'] = '3600'
   
-  # Add debugging
+  # Add Vary header when dealing with CORS
+  response['Vary'] = 'Origin'
+  
   puts "Added CORS headers:"
-  puts "Origin: #{response['Access-Control-Allow-Origin']}"
-  puts "Methods: #{response['Access-Control-Allow-Methods']}"
-  puts "Headers: #{response['Access-Control-Allow-Headers']}"
+  puts "Origin: #{origin}"
+  puts "Request headers: #{request.header.inspect}"
+  puts "Response headers: #{response.inspect}"
 end
 
 # Define backend routes
@@ -67,22 +72,23 @@ ROUTES = {
 
 # Add debugging in the request handler
 server.mount_proc '/' do |req, res|
-  # Print incoming request details
   puts "\nIncoming request:"
   puts "Method: #{req.request_method}"
   puts "Path: #{req.path}"
   puts "Headers: #{req.header.inspect}"
   
-  # Add CORS headers to all responses
-  add_cors_headers(res)
-
-  # Handle OPTIONS requests for CORS preflight
+  # Handle OPTIONS preflight request first
   if req.request_method == 'OPTIONS'
     puts "Handling OPTIONS preflight request"
-    res.status = 200
+    add_cors_headers(res, req)
+    res.status = 204  # No Content
+    res['Content-Length'] = '0'
     return
   end
-
+  
+  # Add CORS headers for all other requests
+  add_cors_headers(res, req)
+  
   # Find matching route - update to handle exact matches
   route = ROUTES.find do |prefix, _| 
     if prefix == '/graphql'
