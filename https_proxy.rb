@@ -58,6 +58,10 @@ ROUTES = {
   '/console' => {
     backend_url: 'http://127.0.0.1:4350/console',
     strip_prefix: true
+  },
+  '/graphql' => {
+    backend_url: 'http://127.0.0.1:4350/graphql',
+    strip_prefix: true
   }
 }
 
