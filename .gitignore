@@ -1,2 +1,4 @@
 
 Gemfile.lock
+cert.pem
+key.pem
