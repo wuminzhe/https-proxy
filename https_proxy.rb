@@ -30,6 +30,14 @@ def map_request_class(method)
   end
 end
 
+# Add CORS headers helper method after the map_request_class method
+def add_cors_headers(response)
+  response['Access-Control-Allow-Origin'] = '*'
+  response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+  response['Access-Control-Allow-Headers'] = 'Origin, Content-Type, Accept, Authorization, X-Requested-With'
+  response['Access-Control-Max-Age'] = '3600'
+end
+
 # Define backend routes
 ROUTES = {
   '/0x' => {
@@ -39,11 +47,24 @@ ROUTES = {
   '/subnames' => {
     backend_url: 'http://127.0.0.1:4350/graphql',
     strip_prefix: true
+  },
+  '/console' => {
+    backend_url: 'http://127.0.0.1:4350/console',
+    strip_prefix: true
   }
 }
 
 # Handle HTTP to HTTP backend
 server.mount_proc '/' do |req, res|
+  # Add CORS headers to all responses
+  add_cors_headers(res)
+
+  # Handle OPTIONS requests for CORS preflight
+  if req.request_method == 'OPTIONS'
+    res.status = 200
+    return
+  end
+
   # Find matching route
   route = ROUTES.find { |prefix, _| req.path.start_with?(prefix) }
   
@@ -71,14 +92,26 @@ server.mount_proc '/' do |req, res|
     uri = URI.parse(backend_server_fullpath)
     request_class = map_request_class(req.request_method)
     proxy_request = request_class.new(uri)
-    req.header.each { |key, value| proxy_request[key] = value }
+    
+    # Forward original headers except host
+    req.header.each do |key, value| 
+      next if key.downcase == 'host'
+      proxy_request[key] = value 
+    end
+    
     proxy_request.body = req.body if req.body
     
     http = Net::HTTP.new(uri.host, uri.port)
     backend_response = http.request(proxy_request)
     res.status = backend_response.code.to_i
     res.body = backend_response.body
-    backend_response.each_header { |key, value| res[key] = value }
+    
+    # Forward backend response headers
+    backend_response.each_header do |key, value|
+      # Skip CORS headers from backend to use proxy's CORS headers
+      next if key.downcase.start_with?('access-control-')
+      res[key] = value
+    end
   else
     res.status = 404
     res.body = "Not Found"
