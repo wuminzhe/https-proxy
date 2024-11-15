@@ -32,9 +32,9 @@ end
 
 # Define backend routes
 ROUTES = {
-  '/gateway' => {
+  '/0x' => {
     backend_url: 'http://127.0.0.1:8080',
-    strip_prefix: true
+    strip_prefix: false
   },
   '/subnames' => {
     backend_url: 'http://127.0.0.1:4350/graphql',
