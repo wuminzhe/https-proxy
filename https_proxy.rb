@@ -60,8 +60,8 @@ ROUTES = {
     strip_prefix: true
   },
   '/graphql' => {
-    backend_url: 'http://127.0.0.1:4350/graphql',
-    strip_prefix: true
+    backend_url: 'http://127.0.0.1:4350',
+    strip_prefix: false
   }
 }
 
@@ -83,19 +83,28 @@ server.mount_proc '/' do |req, res|
     return
   end
 
-  # Find matching route
-  route = ROUTES.find { |prefix, _| req.path.start_with?(prefix) }
+  # Find matching route - update to handle exact matches
+  route = ROUTES.find do |prefix, _| 
+    if prefix == '/graphql'
+      req.path == prefix  # Exact match for /graphql
+    else
+      req.path.start_with?(prefix)  # Prefix match for others
+    end
+  end
   
   if route
     prefix, config = route
     backend_url = config[:backend_url]
     
-    # Remove the prefix if configured
+    # Construct the backend path
     backend_path = if config[:strip_prefix]
       req.path.sub(prefix, '')
     else
       req.path
     end
+    
+    puts "Route matched: #{prefix}"
+    puts "Backend path: #{backend_path}"
     
     # Handle empty path after stripping
     backend_path = '/' if backend_path.empty?
