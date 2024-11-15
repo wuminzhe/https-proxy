@@ -70,6 +70,19 @@ ROUTES = {
   }
 }
 
+# Update the create_http_client method to be simpler for HTTP connections
+def create_http_client(uri)
+  http = Net::HTTP.new(uri.host, uri.port)
+  
+  # Set timeouts to avoid hanging
+  http.open_timeout = 10
+  http.read_timeout = 30
+  http.write_timeout = 30 if http.respond_to?(:write_timeout=)
+  
+  puts "Creating HTTP client for #{uri.scheme}://#{uri.host}:#{uri.port}"
+  http
+end
+
 # Add debugging in the request handler
 server.mount_proc '/' do |req, res|
   puts "\nIncoming request:"
@@ -115,35 +128,53 @@ server.mount_proc '/' do |req, res|
     # Handle empty path after stripping
     backend_path = '/' if backend_path.empty?
     
-    # Construct full backend URL
-    backend_server_fullpath = "#{backend_url}#{backend_path}"
-    puts "Proxying request to #{backend_server_fullpath}"
-
-    # # test, just set the beckend_server_fullpath to user
-    # res.body = backend_server_fullpath
-
-    uri = URI.parse(backend_server_fullpath)
-    request_class = map_request_class(req.request_method)
-    proxy_request = request_class.new(uri)
-    
-    # Forward original headers except host
-    req.header.each do |key, value| 
-      next if key.downcase == 'host'
-      proxy_request[key] = value 
-    end
-    
-    proxy_request.body = req.body if req.body
-    
-    http = Net::HTTP.new(uri.host, uri.port)
-    backend_response = http.request(proxy_request)
-    res.status = backend_response.code.to_i
-    res.body = backend_response.body
-    
-    # Forward backend response headers
-    backend_response.each_header do |key, value|
-      # Skip CORS headers from backend to use proxy's CORS headers
-      next if key.downcase.start_with?('access-control-')
-      res[key] = value
+    begin
+      # Ensure backend_url starts with http://
+      backend_url = "http://#{backend_url}" unless backend_url.start_with?('http://', 'https://')
+      
+      # Construct full backend URL
+      backend_server_fullpath = "#{backend_url}#{backend_path}"
+      puts "\nProxying request:"
+      puts "From: #{req.request_method} #{req.path}"
+      puts "To: #{backend_server_fullpath}"
+      
+      uri = URI.parse(backend_server_fullpath)
+      request_class = map_request_class(req.request_method)
+      proxy_request = request_class.new(uri.request_uri)  # Use request_uri instead of full URI
+      
+      # Forward headers
+      req.header.each do |key, value| 
+        next if key.downcase == 'host'
+        proxy_request[key] = value 
+        puts "Forwarding header: #{key}: #{value}"
+      end
+      
+      proxy_request.body = req.body if req.body
+      
+      http = create_http_client(uri)
+      puts "Sending request to backend..."
+      
+      backend_response = http.request(proxy_request)
+      puts "Received response from backend: #{backend_response.code}"
+      
+      res.status = backend_response.code.to_i
+      res.body = backend_response.body
+      
+      # Forward response headers
+      backend_response.each_header do |key, value|
+        next if key.downcase.start_with?('access-control-')
+        res[key] = value
+        puts "Setting response header: #{key}: #{value}"
+      end
+      
+    rescue => e
+      puts "\nError during proxy request:"
+      puts "Error class: #{e.class}"
+      puts "Error message: #{e.message}"
+      puts "Backtrace:\n#{e.backtrace.join("\n")}"
+      
+      res.status = 502
+      res.body = "Bad Gateway: #{e.message}"
     end
   else
     res.status = 404
